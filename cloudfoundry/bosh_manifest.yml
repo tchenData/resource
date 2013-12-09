@@ -1,0 +1,251 @@
+---
+name: dev128
+director_uuid: 7def69cd-0ab9-43e9-9405-53f156bf3fbd # Change this to the UUID of the BOSH director.
+release: # Find this with > bosh status.
+  name: bosh # Change this to reflect the name of your release. This is specified in your release manifest.
+  version: 11 # Specify the version of your release. This is also specified in your release manifest.
+
+networks:
+- name: default # An internal name for the network in your manifest file
+  subnets:
+  - reserved:
+    # IP addresses which you don't want allocated by BOSH
+    -  192.168.2.2 -  192.168.2.10
+    -  192.168.2.12 -  192.168.2.30
+    -  192.168.2.51 -  192.168.2.254
+    static:
+    # A static IP range that can be used for deploying BOSH
+    -  192.168.2.31 -  192.168.2.38
+    range:  192.168.2.0/24 # The range of IP addresses that can be accessible by BOSH
+    gateway: 192.168.2.1
+    dns:
+    - 192.168.2.11
+    - 192.168.2.21
+    - 192.168.2.1
+    - 202.102.154.3
+    cloud_properties:
+      name: "CF Network" # The name of the virtual machine network in vCenter
+
+#
+# You shouldn't have to change any of the resource pool parameters
+#
+
+resource_pools:
+- name: small
+  stemcell:
+    name: bosh-stemcell
+    version: 0.6.7
+  network: default
+  size: 6
+  cloud_properties:
+    ram: 512
+    disk: 2048
+    cpu: 1
+ 
+- name: director
+  stemcell:
+    name: bosh-stemcell
+    version: 0.6.7
+  network: default
+  size: 1
+  cloud_properties:
+    ram: 1048
+    disk: 8192
+    cpu: 2
+
+compilation:
+  workers: 2
+  network: default
+  cloud_properties:
+    ram: 1048
+    disk: 4048
+    cpu: 4
+
+#
+# If you have errors with canary instances during a deployment, you can try 
+# increasing the canary_watch_time and update_watch_time. The values here are in 
+# milliseconds. Divide by 1000 to get the value in seconds.
+# 
+#
+
+update:
+  canaries: 1
+  canary_watch_time: 60000
+  update_watch_time: 60000
+  max_in_flight: 1
+  max_errors: 2
+
+jobs:
+
+        
+- name: nats
+  template: nats
+  instances: 1
+  resource_pool: small
+  networks:
+  - name: default
+    static_ips:
+    -  192.168.2.31 # Assign a static IP
+
+- name: postgres
+  template: postgres
+  instances: 1
+  resource_pool: small
+  persistent_disk: 2048
+  networks:
+  - name: default
+    static_ips:
+    -  192.168.2.32 # Assign a static IP from the static range specified above
+
+- name: redis
+  template: redis
+  instances: 1
+  resource_pool: small
+  networks:
+  - name: default
+    static_ips:
+    -  192.168.2.33 # Assign a static IP from the static range specified above
+
+- name: powerdns
+  template: powerdns
+  instances: 1
+  resource_pool: small
+  networks:
+  - name: default
+    default: [dns, gateway]
+    static_ips:
+    - 192.168.2.37 # Change: Floating IP 1
+    
+- name: director
+  template: director
+  instances: 1
+  resource_pool: director
+  persistent_disk: 2048
+  networks:
+  - name: default
+    static_ips:
+    -  192.168.2.34 # Assign a static IP from the static range specified above
+
+- name: blobstore
+  template: blobstore
+  instances: 1
+  resource_pool: small
+  persistent_disk: 20480
+  networks:
+  - name: default
+    static_ips:
+    -  192.168.2.35 # Assign a static IP from the static range specified above
+
+- name: health_monitor
+  template: health_monitor
+  instances: 1
+  resource_pool: small
+  networks:
+  - name: default
+    static_ips:
+    -  192.168.2.36 # Assign a static IP from the static range specified above
+
+properties:
+  env:
+
+  dns:
+    user: powerdns
+    password: powerdns
+    address: 192.168.2.37 # Change: Floating IP 1
+    replication:
+      basic_auth: replication:QRoqsenPsNGX6
+      user: replication
+      password: powerdns
+    database:
+      name: powerdns
+      port: 5432
+    recursors: 
+      - 192.168.2.11
+    webserver:
+      password: powerdns
+      port: 8081
+      
+  blobstore:
+    address:  192.168.2.35 # This should be the same IP specified for the job above
+    port: 25251
+    backend_port: 25552
+    agent:
+      user: agent
+      password: 38fh20
+    director:
+      user: director
+      password: oe9U37dbd
+
+  networks:
+    apps: default
+    management: default
+
+  nats:
+    user: nats              
+    password: 38dhj389ddck378gcE
+    address:  192.168.2.31 # This should be the same IP specified for the job above
+    port: 4222
+
+  postgres:
+    user: bosh             
+    password: 29fhcuebJDldhv265kB
+    address:  192.168.2.32 # This should be the same IP specified for the job above
+    port: 5432
+    database: bosh
+
+  redis:
+    address:  192.168.2.33 # This should be the same IP specified for the job above
+    port: 25255
+    password: wicjew93hf2
+
+  director:
+    name: dev124
+    address:  192.168.2.34 # This should be the same IP specified for the job above
+    port: 25555
+
+  hm:
+    http:
+      port: 25923
+      user: admin
+      password: 8wufn
+    director_account:
+      user: admin
+      password: 8wufn
+    intervals:
+      poll_director: 60
+      poll_grace_period: 30
+      log_stats: 300
+      analyze_agents: 60
+      agent_timeout: 180
+      rogue_agent_alert: 180
+    loglevel: info
+    email_notifications: false
+    email_recipients:
+    - noemail@yourdomain.com
+    smtp:
+      from: bhm@localhost.localdomain
+      host: smtp.yourdomain.com
+      port: 25
+      auth: plain
+      user: appcloud
+      password: 38fhsoeY
+      domain: localdomain
+    tsdb_enabled: true # If this option is set to false, comment out its params.
+    tsdb:
+      address: 192.168.2.86
+      port: 4242
+
+  vcenter:
+    address: 192.168.2.103 # The IP of your vCenter server
+    user: Administrator # Your vCenter server user
+    password: dz+1 # You vCenter user password
+    datacenters:
+      - name: NCF # The datacenter name in vCenter
+        vm_folder: vm_folder_bosh #folder to save vm, created in vCenter.
+        template_folder: template_folder_bosh
+        disk_path: boshdeployer_bosh #disk path, created in the datastore in vCenter
+        datastore_pattern: NFSdatastore
+        persistent_datastore_pattern: NFSdatastore	
+        allow_mixed_datastores: true
+        clusters:
+        - CF

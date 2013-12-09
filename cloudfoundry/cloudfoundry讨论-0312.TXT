@@ -1,0 +1,5 @@
+﻿Cloudfoundry提供的功能：
+对RedHat的支持、与Cloudfoundry进行交互的用户界面、能够监控运行状态的界面、通过数据库共享cloudfoundry中的运行状态数据、统一用户登录验证（支持LDAP）、支持.Net应用、代码和依赖包的离线安装方式、支持Cassandra、NATS消息中心对消息进行非持久化处理
+
+Cloudfoundry不提供的功能：
+利用非http协议访问Cloudfoundry内的应用、对Oracle的支持、对WebLogic的支持、一个Tomcat发布多个应用、对OpenStack的支持

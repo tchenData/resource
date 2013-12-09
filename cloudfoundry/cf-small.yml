@@ -1,0 +1,454 @@
+---
+name: cf.offline
+director_uuid: baefa3bd-8884-4982-b4bb-8e2c028458d2
+
+releases:
+- name: appcloud
+  version: 128.20-dev
+- name: sample-service
+  version: 0.1-dev
+
+compilation:
+  workers: 1
+  reuse_compilation_vms: true
+  network: default
+  cloud_properties:
+    ram: 3048
+    disk: 10096
+    cpu: 2
+
+update:
+  canaries: 1
+  canary_watch_time: 3000-90000
+  update_watch_time: 3000-90000
+  max_in_flight: 1
+  max_errors: 1
+
+networks:
+
+- name: default
+  subnets:
+  - range: 192.168.2.0/24
+    reserved:
+    - 192.168.2.2 - 192.168.2.20
+    - 192.168.2.21 - 192.168.2.70 
+    - 192.168.2.103 - 192.168.2.110
+    static:
+    - 192.168.2.71 - 192.168.2.102
+    - 192.168.2.111 - 192.168.2.200
+        
+    gateway: 192.168.2.1
+    dns:
+    - 192.168.2.37
+    - 192.168.2.11
+    - 192.168.2.1  
+    - 202.102.154.3
+    cloud_properties:
+      name: "CF Network"
+
+resource_pools:
+
+- name: medium
+  network: default
+  size: 5
+  stemcell:
+    name: bosh-stemcell
+    version: 0.6.7
+  cloud_properties:
+    ram: 2524
+    disk: 20096
+    cpu: 2 
+  env:
+    bosh:
+      # password generated using mkpasswd -m sha-512
+      password: $6$gZBmUQH4T$MY9zOP4rRDD/.62MOfLy/ZILHdUpyx1DnMqKDP429Qhbo5O9Nfj18Z2gk8sCFnJDKRMEEzgCnXFXamODQvH4x0
+
+- name: infrastructure
+  network: default
+  size: 5 
+  stemcell:
+    name: bosh-stemcell
+    version: 0.6.7
+  cloud_properties:
+    ram: 2024
+    disk: 15096
+    cpu: 2 
+  env:
+    bosh:
+      # password generated using mkpasswd -m sha-512
+      password: $6$gZBmUQH4T$MY9zOP4rRDD/.62MOfLy/ZILHdUpyx1DnMqKDP429Qhbo5O9Nfj18Z2gk8sCFnJDKRMEEzgCnXFXamODQvH4x0
+
+- name: deas
+  network: default
+  size: 7 
+  stemcell:
+    name: bosh-stemcell
+    version: 0.6.7
+  cloud_properties:
+    ram: 7000
+    disk: 50096
+    cpu: 4
+  env:
+    bosh:
+      # password generated using mkpasswd -m sha-512
+      password: $6$gZBmUQH4T$MY9zOP4rRDD/.62MOfLy/ZILHdUpyx1DnMqKDP429Qhbo5O9Nfj18Z2gk8sCFnJDKRMEEzgCnXFXamODQvH4x0
+
+- name: services_3gb_small
+  network: default
+  size: 1
+  stemcell:
+    name: bosh-stemcell
+    version: 0.6.7
+  cloud_properties:
+    ram: 1800
+    disk: 10096
+    cpu: 2
+  env:
+    bosh:
+      # password generated using mkpasswd -m sha-512
+      password: $6$gZBmUQH4T$MY9zOP4rRDD/.62MOfLy/ZILHdUpyx1DnMqKDP429Qhbo5O9Nfj18Z2gk8sCFnJDKRMEEzgCnXFXamODQvH4x0
+
+ 
+jobs:
+
+- name: nfs
+  release: appcloud
+  template:
+  - debian_nfs_server
+  instances: 1
+  resource_pool: medium
+  persistent_disk: 8192
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.94
+
+- name: syslog
+  release: appcloud
+  template:
+  - syslog_aggregator
+  instances: 1
+  resource_pool: infrastructure
+  persistent_disk: 8192
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.91
+    
+- name: nats
+  release: appcloud
+  template:
+  - nats
+  instances: 1
+  resource_pool: medium
+  persistent_disk: 8192
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.92
+    
+- name: redis
+  release: appcloud
+  template:
+  - vcap_redis
+  instances: 1
+  resource_pool: medium
+  persistent_disk: 8192
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.93
+############dashboard##############
+
+- name: login
+  release: appcloud 
+  template: 
+  - login
+  instances: 1
+  resource_pool: infrastructure
+  networks:
+  - name: default
+    static_ips: 192.168.2.96
+#########################################
+- name: cc_ccdb
+  release: appcloud
+  template:
+  - cloud_controller
+  - postgres
+  instances: 1
+  resource_pool: medium
+  persistent_disk: 4024
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.82
+  properties:
+    db: ccdb
+
+- name: hm
+  release: appcloud
+  template:
+  - health_manager_next
+  instances: 1
+  resource_pool: infrastructure
+  persistent_disk: 1024
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.97
+
+    
+- name: uaa_uaadb
+  release: appcloud
+  template:
+  - uaa
+  - postgres
+  instances: 1
+  resource_pool: medium
+  persistent_disk: 4024
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.83
+  properties:
+    db: uaadb
+
+- name: router
+  release: appcloud
+  template: router
+  instances: 1
+  resource_pool: infrastructure
+  networks:
+  - name: default
+    static_ips: 192.168.2.84
+
+- name: stager
+  release: appcloud
+  template:
+  - stager
+  instances: 1
+  resource_pool: deas
+  networks:
+  - name: default
+    static_ips: 
+    - 192.168.2.81
+
+- name: dea
+  release: appcloud
+  template:
+  - dea
+  instances: 6 
+  resource_pool: deas
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.100
+    - 192.168.2.122
+    - 192.168.2.79
+    - 192.168.2.78
+    - 192.168.2.77
+    - 192.168.2.76
+
+ 
+- name: mysql_node_100
+  release: appcloud
+  template:
+  - mysql_gateway
+  - mysql_node_ng
+  instances: 1
+  resource_pool: services_3gb_small
+  persistent_disk: 1315
+  properties:
+    plan: "100"
+    mysql_node:
+      max_tmp: 256
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.85
+
+- name: echo_service
+  release: sample-service
+  template:
+  - echo_node
+  - echo_gateway 
+  instances: 1
+  resource_pool: infrastructure 
+  persistent_disk: 1691
+  networks:
+  - name: default
+    static_ips:
+    - 192.168.2.89
+
+properties:
+
+  domain: cf.offline
+
+  networks:
+    apps: default
+    management: default
+
+  nats:
+    user: nats
+    password: z2b3ij3122
+    address: 192.168.2.92
+    port: 4222
+
+  ccdb:
+    address: 192.168.2.82
+    port: 5524
+    pool_size: 10
+    roles:
+    - tag: admin
+      name: ccadmin
+      password: tauBauWauZZb2
+    databases:
+    - tag: cc
+      name: appcloud
+
+  uaadb:
+    db_scheme: postgresql
+    address: 192.168.2.83
+    port: 2544
+    roles:
+    - tag: admin
+      name: root
+      password: 33139c8e3f34bc201351ba7a
+    databases:
+    - tag: uaa
+      name: uaa
+  
+  cc:
+    srv_api_uri: http://api.cf.offline
+    password: zbTuuLaap44jadlas2l312lk
+    token: 267f4eaa8c1758f66d5cb7adcb24adb9d7
+    use_nginx: true
+    new_stager_percent: 100
+    new_stager_email_regexp: '.*@vmware.com'
+    staging_upload_user: zxsfhgjg
+    staging_upload_password: ZNVfdase9
+    allow_registration: true
+    default_account_capacity:
+      memory: 8048
+    uaa:
+      enabled: true
+      resource_id: cloud_controller
+      token_creation_email_filter: [""]
+    admins:
+    - admin1@vmware.com
+    - admin2@vmware.com
+
+  vcap_redis:
+    address: 192.168.2.93
+    port: 5454
+    password: PoIxbL98RWpwBuUJvKNojnpIcRb1ot2
+    maxmemory: 20000000 # 200MB
+
+  router:
+    status:
+      port: 8080
+      user: sBNUxXlS0pc71wVef
+      password: 7nTmaIf9vPV4mJyBe
+
+#############dashboard#########
+ 
+##########################
+  dea:
+    max_memory: 8192
+
+  nfs_server:
+    address: 192.168.2.94
+    network: 192.168.2.0/24
+
+  service_plans:
+    mysql:
+      "100":
+        description: "Shared server, shared VM, 1MB memory, 10MB storage, 10 connections"
+        free: true
+        job_management:
+          high_water: 8
+          low_water: 2
+        configuration:
+          capacity: 10
+          max_db_size: 10
+          key_buffer: 512
+          innodb_buffer_pool_size: 512
+          max_allowed_packet: 16
+          thread_cache_size: 128
+          query_cache_size: 128
+          max_long_query: 3
+          max_long_tx: 30
+          max_clients: 10
+          max_connections: 40
+          table_open_cache: 80
+          innodb_tables_per_database: 50
+          connection_pool_size:
+            min: 5
+            max: 10
+          warden:
+            enable: false
+  
+  mysql_gateway:
+    token: d8d7b640fea0666c28eaa93eccdc275e649b6d27
+    default_plan: "100"
+    supported_versions: ["5.5"]
+    version_aliases:
+      current: "5.5"
+  mysql_node:
+    supported_versions: ["5.5"]
+    default_version: "5.5"
+    password: zb213djkas
+
+  syslog_aggregator:
+    address: 192.168.2.91
+    port: 54321
+
+  stager:
+    max_staging_duration: 120
+    max_active_tasks: 20
+    queues:
+    - staging
+
+  uaa:
+    catalina_opts: -Xmx768m -XX:MaxPermSize=256m
+    url: http://uaa.cf.offline
+    resource_id: account_manager
+    client_secret: somesecret
+    token_secret: tokensecret
+    cc:
+      token_secret: WGvbxaiC371JM
+      client_secret: fOZF5DMNDZIfCb9A
+    admin:
+      client_secret: MeM5fER8evgEisjj
+    login:
+      client_secret: HZtd2FyZS5jb20iL
+    batch:
+      username: do0H2AKay2jAc
+      password: FSCTiplI5Q83n
+    client:
+      override: true
+      autoapprove:
+        - vmc
+        - login
+        #- dashboard
+###########
+ 
+####################      
+  login:
+    protocol: http
+    links:
+      home: http://portal.cf.offline
+      passwd: http://portal.cf.offline/password_resets/new
+      signup: http://portal.cf.offline/register
+ 
+  echo_gateway:
+    token: changeechotoken
+    service_timeout: 15
+    node_timeout: 10
+
+  echoserver:
+    port: 5002
+
+##############service_broker conf from here########################
+     
+################service_broker conf end #############################
